@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -27,11 +27,21 @@ const server = http.createServer((req, res) => {
         'Content-Length': body.length
       }
     };
+    // Forward the MCP session id if the client sent one
+    const sessionId = req.headers['mcp-session-id'];
+    if (sessionId) options.headers['Mcp-Session-Id'] = sessionId;
+
     const proxyReq = https.request(TARGET + req.url, options, proxyRes => {
-      res.writeHead(proxyRes.statusCode, {
+      const responseHeaders = {
         'Content-Type': proxyRes.headers['content-type'] || 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      });
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'Mcp-Session-Id'
+      };
+      // Pass the session id back to the browser so it can reuse it on the next call
+      if (proxyRes.headers['mcp-session-id']) {
+        responseHeaders['Mcp-Session-Id'] = proxyRes.headers['mcp-session-id'];
+      }
+      res.writeHead(proxyRes.statusCode, responseHeaders);
       proxyRes.pipe(res);
     });
     proxyReq.on('error', err => {
